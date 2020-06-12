@@ -68,7 +68,7 @@ class Detector:
 
         # get pixels demonstrating possible parallax rainbow effect 
         candidates = self.getCandidateMap( data )
-        candidates = np.bitwise_and( candidates, ~qa['MASK'] )
+        candidates = np.bitwise_and( candidates, np.bitwise_not( qa['MASK'] ) )
 
         if mask_pathname is None:
 
@@ -81,7 +81,7 @@ class Detector:
             roads = self.loadRoadMask( mask_pathname, geo )
 
         #  mask candidates with road mask 
-        candidates = candidates * roads
+        # candidates = candidates * roads
 
         # assign object ids to vehicle detections
         blobs = label( candidates )
@@ -96,47 +96,46 @@ class Detector:
             x.append( np.mean( pts[1][idx] ) )
             y.append( np.mean( pts[0][idx] ) )
 
-
-
-
-
-
         # create and show 24bit rgb image
-        rgb = self.getRgbImage( data, [ 'B2', 'B3', 'B4' ] )
-        plt.imshow( rgb )
+        rgb = self.getRgbImage( data, [ 'B4', 'B3', 'B2' ] )
+        print( 'Moving vehicles detected: {}'.format ( len( x ) ) )
 
         # plot locations of 'vehicles'
         plt.plot( x, y, 'or', markersize=20, fillstyle='none' )
+        plt.imshow( rgb )
         plt.show()
 
-        # create plot canvas
-        nrows = 4; ncols = 4; size = 64
-        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(80, 80))
+        # any vehicles found ?
+        if len( x ) > 0 :
 
-        # iterate axes
-        for row in range( nrows ):
-            for col in range( ncols ):
+            # create plot canvas
+            nrows = 4; ncols = 4; size = 64
+            fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(80, 80))
 
-                while True:
-                
-                    # randomly pick candidate location
-                    idx = random.randrange( len( x ) )
-                    x1 = int ( x[ idx ] - size ); y1 = int ( y[ idx ] - size )
+            # iterate axes
+            for row in range( nrows ):
+                for col in range( ncols ):
 
-                    # check valid image is plotable
-                    if y1 > 0 and x1 > 0 and y1 < ( data[ 'B4' ].shape[0] - size ) and x1 < ( data[ 'B4' ].shape[1] - size ):
-                        break
+                    while True:
+                    
+                        # randomly pick candidate location
+                        idx = random.randrange( len( x ) )
+                        x1 = int ( x[ idx ] - size ); y1 = int ( y[ idx ] - size )
 
-                # plot rgb subimage
-                axes[ row ][ col ].imshow( rgb [ y1: (y1+size*2), x1 : (x1+size*2), : ] )
+                        # check valid image is plotable
+                        if y1 > 0 and x1 > 0 and y1 < ( data[ 'B4' ].shape[0] - size ) and x1 < ( data[ 'B4' ].shape[1] - size ):
+                            break
 
-                # clear ticks
-                axes[ row ][ col ].get_xaxis().set_ticks([])
-                axes[ row ][ col ].get_yaxis().set_ticks([])
+                    # plot rgb subimage
+                    axes[ row ][ col ].imshow( rgb [ y1: (y1+size*2), x1 : (x1+size*2), : ] )
 
-        # tighten up
-        fig.tight_layout()        
-        plt.show()
+                    # clear ticks
+                    axes[ row ][ col ].get_xaxis().set_ticks([])
+                    axes[ row ][ col ].get_yaxis().set_ticks([])
+
+            # tighten up
+            fig.tight_layout()        
+            plt.show()
 
         return
 
@@ -187,7 +186,6 @@ class Detector:
 
             # combine qa mask with cloud mask
             qa[ 'MASK' ] = np.bitwise_or( qa[ 'MASK' ], qa[ 'CLOUDS' ] )
-
 
         return data, geo, qa
 
@@ -329,18 +327,25 @@ class Detector:
 
                     # get bottom right coordinates
                     c2 = c1 + geo[ 'SHAPE'][ 1 ]
-                    r2 = c1 + geo[ 'SHAPE'][ 0 ]
+                    r2 = r1 + geo[ 'SHAPE'][ 0 ]
 
                     # correct out-of-bounds pixel coordinates
                     c1 = max( c1, 0 ); r1 = max ( r1, 0 )
                     c2 = min( c2, ds.RasterXSize ); r2 = min( r2, ds.RasterYSize )
 
-                    # read mask by offset
-                    data = ds.GetRasterBand(1).ReadAsArray( c1, r1, c2 - c1, r2 - r1 )
+                    if c2 - c1 > 0 and r2 - r1 > 0: 
 
-                    # create roads mask                    
-                    roads = np.zeros( geo[ 'SHAPE'], dtype=np.uint8 )
-                    roads[ 0 : data.shape[ 0 ], 0: data.shape[ 1 ] ] = data
+                        # read mask by offset
+                        data = ds.GetRasterBand(1).ReadAsArray( c1, r1, c2 - c1, r2 - r1 )
+
+                        # create roads mask                    
+                        roads = np.zeros( geo[ 'SHAPE'], dtype=np.uint8 )
+                        roads[ 0 : data.shape[ 0 ], 0: data.shape[ 1 ] ] = data
+
+                    else:
+
+                        # invalid coordinates so use default ones mask
+                        roads = np.ones( geo[ 'SHAPE'], dtype=np.uint8 )
 
         return roads
 
